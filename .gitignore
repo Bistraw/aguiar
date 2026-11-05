@@ -1,2 +1,7 @@
 venv/
 .obsidian/
+__pycache__/
+db.sqlite
+build/
+dist/
+*.spec
