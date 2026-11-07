@@ -121,6 +121,14 @@ class InterviewSession:
         self.current = None
         self.shown_at = None
 
+    def outcome_counts(self):
+        """Number of recorded answers per Outcome."""
+        rows = db.execute(
+            'SELECT "Outcome", COUNT(*) FROM InterviewQuestionAnswer WHERE "InterviewId" = ? GROUP BY "Outcome"',
+            (self.interview.id,),
+        ).fetchall()
+        return {row[0]: row[1] for row in rows}
+
     def pause(self):
         self._finish_with(InterviewStatus.PAUSED, set_end=False)
 

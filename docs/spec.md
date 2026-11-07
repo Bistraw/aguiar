@@ -58,6 +58,8 @@ For the first version, the card reader uses the webcam to scan the QR code in th
 
 After an answer is registered, scans are ignored until no QR has been detected for ~1 second (the card was removed), to avoid one card answering several questions.
 
+A short text next to the camera preview guides the patient: show the card, card read (remove it), or that card is not an option for this question. It is neutral: it never reveals whether the answer was the expected one. The preview is mirrored to make aiming easier; decoding uses the original frame.
+
 Ignored scans (unknown prefix, unknown card, or card not linked to the current question) are not stored.
 
 The card screen has an "Export QR" action that saves a PNG with the QR and the card `Name` below it, ready to print.
@@ -218,7 +220,8 @@ Dates and DateTimes are stored as ISO-8601 TEXT in local time, including the UTC
 
 - `active_records/`: one active record class per entity (load/save/delete itself).
 - `db.py`: SQLite connection and transaction helper used by the active records (no Unit of Work pattern). Runs `PRAGMA foreign_keys = ON` on every connection.
-- `ui/`: Tkinter screens.
+- `ui/`: Tkinter screens. `ui/theme.py` holds colors, fonts and ttk styles; `ui/icons.py` loads and tints icons.
+- `assets/`: app icon and `icons/` (Game Icons by Kenney, CC0), bundled into the `.exe`.
 - `services/`: interview flow, QR scanner (webcam capture runs in a background thread), CSV export, QR image export.
 - `schema.sql`: database creation script.
 - `main.py`: entry point.

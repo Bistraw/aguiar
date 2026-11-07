@@ -2,6 +2,8 @@ from tkinter import messagebox, ttk
 
 from active_records import SettingActiveRecord
 from services.qr_scanner import list_cameras
+from ui.common import make_button
+from ui.theme import px
 
 
 def current_camera_index():
@@ -13,17 +15,25 @@ def current_camera_index():
 
 class SettingsView(ttk.Frame):
     def __init__(self, parent):
-        super().__init__(parent, padding=16)
-        box = ttk.LabelFrame(self, text="Camera", padding=12)
+        super().__init__(parent)
+        box = ttk.Frame(self, style="Card.TFrame", padding=px(18))
         box.pack(anchor="nw", fill="x")
-        ttk.Label(box, text="Camera used to scan the cards:").grid(row=0, column=0, sticky="w", padx=(0, 8))
-        self.combo = ttk.Combobox(box, state="readonly", width=20)
-        self.combo.grid(row=0, column=1, sticky="w")
-        ttk.Button(box, text="Detect cameras", command=self.detect).grid(row=0, column=2, padx=8)
-        ttk.Button(box, text="Save", command=self.save).grid(row=0, column=3)
-        self.status = ttk.Label(box, text="", foreground="gray")
-        self.status.grid(row=1, column=0, columnspan=4, sticky="w", pady=(8, 0))
+        ttk.Label(box, text="Camera", style="Section.TLabel").pack(anchor="w")
+        ttk.Label(box, text="Used to scan the answer cards during an interview. Changes are saved automatically.",
+                  style="SurfaceMuted.TLabel").pack(anchor="w", pady=(px(2), px(12)))
+        row = ttk.Frame(box, style="Surface.TFrame")
+        row.pack(anchor="w")
+        self.combo = ttk.Combobox(row, state="readonly", width=24)
+        self.combo.pack(side="left")
+        self.combo.bind("<<ComboboxSelected>>", lambda e: self.save())
+        make_button(row, "Detect cameras", self.detect, "video").pack(side="left", padx=(px(8), 0))
+        self.status = ttk.Label(box, style="SurfaceMuted.TLabel")
+        self.status.pack(anchor="w", pady=(px(10), 0))
         self._indexes = []
+
+        credits_box = ttk.Frame(self, padding=(px(2), px(12)))
+        credits_box.pack(anchor="w")
+        ttk.Label(credits_box, text="Icons: Game Icons by Kenney (www.kenney.nl), CC0.", style="Muted.TLabel").pack()
 
     def refresh(self):
         index = current_camera_index()
@@ -39,8 +49,12 @@ class SettingsView(ttk.Frame):
 
     def detect(self):
         self.status.configure(text="Detecting cameras…")
+        self.winfo_toplevel().configure(cursor="watch")
         self.update_idletasks()
-        found = list_cameras()
+        try:
+            found = list_cameras()
+        finally:
+            self.winfo_toplevel().configure(cursor="")
         if not found:
             self.status.configure(text="No camera detected.")
             messagebox.showwarning("Camera", "No camera detected.", parent=self)
@@ -49,6 +63,8 @@ class SettingsView(ttk.Frame):
         current = current_camera_index()
         self._fill(current if current in found else found[0])
         self.status.configure(text=f"Detected: {', '.join(f'Camera {i}' for i in found)}")
+        if current not in found:
+            self.save()
 
     def save(self):
         index = self.combo.current()

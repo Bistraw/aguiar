@@ -8,28 +8,63 @@ from active_records import (
     ValidationError,
 )
 from services.interview_service import create_interview, list_interviews
-from ui.common import FormDialog, ListPanel, confirm, format_datetime, run_action
+from ui import theme
+from ui.common import Action, FormDialog, ListPanel, confirm, format_datetime, run_action
 from ui.interview_screen import export_csv_dialog, open_interview_screen
+
+STATUS_DISPLAY = {
+    InterviewStatus.CREATED: ("Not started", "right", theme.MUTED),
+    InterviewStatus.IN_PROGRESS: ("In progress", "next", theme.ACCENT),
+    InterviewStatus.PAUSED: ("Paused", "pause", theme.WARNING),
+    InterviewStatus.COMPLETED: ("Completed", "checkmark", theme.SUCCESS),
+    InterviewStatus.ABORTED: ("Ended early", "stop", theme.MUTED),
+}
 
 
 class InterviewsView(ttk.Frame):
     def __init__(self, parent):
-        super().__init__(parent, padding=8)
+        super().__init__(parent)
         self.list = ListPanel(
             self,
-            "Interviews",
-            [("Patient", 180), ("Bank", 180), ("Status", 90), ("Started", 130), ("Ended", 130), ("Progress", 80)],
-            [("New", self.new), ("Start / Resume", self.start), ("Export CSV", self.export), ("Delete", self.delete)],
+            "All interviews",
+            [("Patient", 190), ("Bank", 190), ("Status", 110, False), ("Started", 130, False),
+             ("Ended", 130, False), ("Progress", 80, False)],
+            [
+                Action("New interview", self.new, "plus", "primary", needs_selection=False),
+                Action("Start", self.start, "next", key="start"),
+                Action("Export CSV", self.export, "export"),
+                Action("Delete", self.delete, "trashcan", "danger"),
+            ],
+            on_select=self._update_start_button,
             on_activate=self.start,
+            on_delete=self.delete,
+            searchable=True,
+            status_column=True,
         )
+        self.list.set_empty("multiplayer", "No interviews yet",
+                            "Create one by choosing a patient and a question bank.",
+                            ("New interview", self.new, "plus"))
         self.list.pack(fill="both", expand=True)
+        self._statuses = {}
 
     def refresh(self):
-        self.list.set_rows(
-            (r["Id"], [r["PatientName"], r["BankName"], r["Status"], format_datetime(r["Start"]),
-                       format_datetime(r["End"]), f'{r["Answered"]}/{r["Total"]}'])
-            for r in list_interviews()
-        )
+        rows = list_interviews()
+        self._statuses = {r["Id"]: r["Status"] for r in rows}
+        self.list.set_rows(self._row(r) for r in rows)
+        self._update_start_button()
+
+    @staticmethod
+    def _row(r):
+        label, icon_name, color = STATUS_DISPLAY[r["Status"]]
+        values = [r["PatientName"], r["BankName"], label, format_datetime(r["Start"]),
+                  format_datetime(r["End"]), f'{r["Answered"]} / {r["Total"]}']
+        return r["Id"], values, (icon_name, color)
+
+    def _update_start_button(self):
+        status = self._statuses.get(self.list.selected_id())
+        self.list.button("start").configure(text=" Resume" if status in (InterviewStatus.PAUSED,
+                                                                         InterviewStatus.IN_PROGRESS) else " Start")
+        self.list.set_enabled("start", status not in InterviewStatus.FINISHED)
 
     def _selected(self):
         interview = InterviewActiveRecord.get(self.list.selected_id())
@@ -40,14 +75,20 @@ class InterviewsView(ttk.Frame):
     def new(self):
         patients = PatientActiveRecord.all()
         banks = QuestionBankActiveRecord.all()
-        if not patients or not banks:
-            messagebox.showinfo("Interviews", "Create at least one patient and one question bank first.", parent=self)
+        missing = [name for name, records in (("patient", patients), ("question bank", banks)) if not records]
+        if missing:
+            needed = " and one ".join(missing)
+            messagebox.showinfo("New interview", f"Create at least one {needed} first.", parent=self)
             return
         fields = [
-            {"key": "patient_id", "label": "Patient", "kind": "combo", "options": [(p.id, p.name) for p in patients]},
-            {"key": "bank_id", "label": "Question bank", "kind": "combo", "options": [(b.id, b.name) for b in banks]},
-            {"key": "give_feedback", "label": "Show feedback", "kind": "check"},
-            {"key": "answer_limit", "label": "Timeout per question\n(seconds, blank = none)"},
+            {"key": "patient_id", "label": "Patient", "kind": "combo", "required": True,
+             "options": [(p.id, p.name) for p in patients]},
+            {"key": "bank_id", "label": "Question bank", "kind": "combo", "required": True,
+             "options": [(b.id, _bank_label(b)) for b in banks]},
+            {"key": "answer_limit", "label": "Time limit per question",
+             "hint": "In seconds. Leave blank for no limit."},
+            {"key": "give_feedback", "label": "Feedback", "kind": "check",
+             "hint": "Show the answer's feedback text after each answer"},
         ]
         created = {}
 
@@ -57,19 +98,19 @@ class InterviewsView(ttk.Frame):
                 try:
                     limit = int(limit)
                 except ValueError:
-                    raise ValidationError("The timeout must be a whole number of seconds.")
+                    raise ValidationError("The time limit must be a whole number of seconds.")
             if not values["patient_id"]:
                 raise ValidationError("A patient is required.")
             created["interview"] = create_interview(
                 values["patient_id"], values["bank_id"], values["give_feedback"], limit
             )
 
-        FormDialog(self, "New interview", fields, {"give_feedback": False}, submit)
+        FormDialog(self, "New interview", fields, {"give_feedback": False}, submit, submit_text="Create")
         interview = created.get("interview")
         if interview:
             self.refresh()
             self.list.select(interview.id)
-            if messagebox.askyesno("Interviews", "Interview created. Start it now?", parent=self):
+            if messagebox.askyesno("New interview", "Interview created. Start it now?", parent=self):
                 self._open(interview)
 
     def start(self):
@@ -94,3 +135,8 @@ class InterviewsView(ttk.Frame):
         if interview and confirm(self, "Delete the selected interview and all its answers?"):
             if run_action(self, interview.delete):
                 self.refresh()
+
+
+def _bank_label(bank):
+    count = len(bank.questions())
+    return f"{bank.name} ({count} question{'' if count == 1 else 's'})"

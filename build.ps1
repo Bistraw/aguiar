@@ -17,11 +17,14 @@ if ($LASTEXITCODE -ne 0) { throw "pip install failed." }
 
 Write-Host "Building executable..."
 $schema = Join-Path $PSScriptRoot "schema.sql"
+$assets = Join-Path $PSScriptRoot "assets"
 & $python -m PyInstaller `
     --noconfirm --clean `
     --onefile --windowed `
     --name InterviewAssistant `
+    --icon (Join-Path $assets "app.ico") `
     --add-data "$schema;." `
+    --add-data "$assets;assets" `
     --distpath dist --workpath build --specpath build `
     main.py
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed." }

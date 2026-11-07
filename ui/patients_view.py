@@ -1,30 +1,41 @@
+from datetime import date
 from tkinter import messagebox, ttk
 
 from active_records import PatientActiveRecord
-from ui.common import FormDialog, ListPanel, confirm, run_action, short
+from ui.common import Action, FormDialog, ListPanel, confirm, run_action, short
 
 FIELDS = [
-    {"key": "name", "label": "Name"},
-    {"key": "birth_date", "label": "Birth date (YYYY-MM-DD)"},
+    {"key": "name", "label": "Name", "required": True},
+    {"key": "birth_date", "label": "Birth date", "hint": "Format: YYYY-MM-DD. Optional; used to compute the age."},
     {"key": "description", "label": "Description", "kind": "text", "height": 5},
 ]
 
 
 class PatientsView(ttk.Frame):
     def __init__(self, parent):
-        super().__init__(parent, padding=8)
+        super().__init__(parent)
         self.list = ListPanel(
             self,
-            "Patients",
-            [("Name", 220), ("Birth date", 110), ("Description", 400)],
-            [("New", self.new), ("Edit", self.edit), ("Delete", self.delete)],
+            "All patients",
+            [("Name", 240), ("Birth date", 110, False), ("Age", 70, False), ("Description", 400)],
+            [
+                Action("New patient", self.new, "plus", "primary", needs_selection=False),
+                Action("Edit", self.edit, "wrench"),
+                Action("Delete", self.delete, "trashcan", "danger"),
+            ],
             on_activate=self.edit,
+            on_delete=self.delete,
+            searchable=True,
         )
+        self.list.set_empty("singleplayer", "No patients yet", "Add a patient to be able to create interviews.",
+                            ("New patient", self.new, "plus"))
         self.list.pack(fill="both", expand=True)
 
     def refresh(self):
+        today = date.today()
         self.list.set_rows(
-            (p.id, [p.name, p.birth_date, short(p.description, 80)]) for p in PatientActiveRecord.all()
+            (p.id, [p.name, p.birth_date, p.age_at(today), short(p.description, 80)])
+            for p in PatientActiveRecord.all()
         )
 
     def _selected(self):
